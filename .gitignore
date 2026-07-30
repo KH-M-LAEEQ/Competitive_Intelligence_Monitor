@@ -1,0 +1,6 @@
+# local tool config, not meant to be shared
+.claude/settings.local.json
+
+# OS junk
+.DS_Store
+Thumbs.db
