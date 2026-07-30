@@ -5,9 +5,10 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useWorkspaceContext } from "@/lib/workspace-context";
-import { CategoryPriceStats, ComparisonResponse, Competitor, SiteSummary } from "@/lib/types";
+import { CategoryPriceStats, ChangeLog, ComparisonResponse, Competitor, SiteSummary } from "@/lib/types";
 import DonutChart from "@/components/charts/DonutChart";
 import DualTrendChart from "@/components/charts/DualTrendChart";
+import ClassificationBadge from "@/components/ui/ClassificationBadge";
 
 // Cycled in fixed order across category pills — kept distinct from --accent
 // (already owns "current offers," the actionable signal on this card) and
@@ -59,6 +60,7 @@ export default function ComparePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ComparisonResponse | null>(null);
+  const [changeLogs, setChangeLogs] = useState<ChangeLog[]>([]);
   const [otherCompetitors, setOtherCompetitors] = useState<Competitor[]>([]);
   const [compareTo, setCompareTo] = useState<string>("");
   const [siteSummary, setSiteSummary] = useState<SiteSummary | null>(null);
@@ -72,14 +74,23 @@ export default function ComparePage() {
   const load = useCallback(async (wsId: number, compareToId?: string) => {
     try {
       const query = compareToId ? `?compare_to=${compareToId}` : "";
-      const [res, comps, summary] = await Promise.all([
+      const [res, comps, summary, logs] = await Promise.all([
         apiFetch(`/workspaces/${wsId}/competitors/${competitorId}/comparison${query}`),
         apiFetch(`/workspaces/${wsId}/competitors/`),
         apiFetch(`/workspaces/${wsId}/competitors/${competitorId}/site-summary/`).catch(() => null),
+        apiFetch(`/workspaces/${wsId}/change-logs/`),
       ]);
       setData(res);
       setOtherCompetitors(comps.filter((c: Competitor) => c.id !== competitorId));
       setSiteSummary(summary);
+      setChangeLogs(
+        logs
+          .filter((l: ChangeLog) => l.competitor_id === competitorId)
+          .sort(
+            (a: ChangeLog, b: ChangeLog) =>
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
+      );
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
     } finally {
@@ -354,6 +365,46 @@ export default function ComparePage() {
           />
         </Card>
       </div>
+
+      <Card>
+        <h2 className="m-0 text-[14.5px] font-semibold tracking-[-0.01em]">Recent changes</h2>
+        {changeLogs.length === 0 ? (
+          <p className="text-sm text-[var(--text-faint)]">No changes detected yet for this competitor.</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {changeLogs.slice(0, 10).map((log) => (
+              <div
+                key={log.id}
+                className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-nested)] px-4 py-3.5"
+              >
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <ClassificationBadge classification={log.classification} />
+                    {log.materiality_score !== null && (
+                      <span className="font-mono text-[11px] text-[var(--text-muted)]">
+                        {(log.materiality_score / 100).toFixed(2)} materiality
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-mono text-[11px] text-[var(--text-faint)]">
+                    {new Date(log.created_at).toLocaleString()}
+                  </span>
+                </div>
+                {log.rationale && (
+                  <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[var(--text-secondary)]">
+                    {log.rationale}
+                  </p>
+                )}
+                {log.diff && (
+                  <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-[var(--border-subtler)] bg-[var(--bg-page)] p-3 font-mono text-[11.5px] text-[var(--text-dim)]">
+                    {log.diff}
+                  </pre>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       <Card>
         <h2 className="m-0 text-[14.5px] font-semibold tracking-[-0.01em]">Traffic trend</h2>

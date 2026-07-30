@@ -9,21 +9,26 @@ from app.services.noise_filter import strip_noise
 __all__ = ["capture_rendered_text", "find_category_listing_url", "RenderedContentError"]
 
 _GOTO_TIMEOUT_MS = 15_000
-_SETTLE_MS = 3_000
+_SETTLE_MS = 5_000
 
-# Some storefronts hydrate their nav/category menu from a JSON data blob
-# embedded in a <script> tag and only build the visible dropdown DOM on user
-# interaction (hover/click) — the category names never appear in rendered
-# text at all. Matches a "name" field immediately followed by a "handle"
-# field, the shape of a menu/category node in that kind of payload; plain
-# object keys or CSS elsewhere in the page won't have both side by side.
-# Quotes may be backslash-escaped (\") when the JSON is itself embedded as a
-# string literal inside a larger hydration payload, hence the \\* before
-# each quote below.
+# Some storefronts hydrate their nav/category menu — and separately, their
+# hero/promo banner tiles — from JSON data blobs embedded in a <script> tag,
+# building the visible DOM only on user interaction (hover) or not as text
+# at all (banner tiles are often rendered as an image with the JSON label
+# used only for alt text/analytics). Either way, the label text never
+# appears in rendered page text. Two distinct field-pair shapes have been
+# seen in the wild: a "name" immediately followed by "handle" (category/menu
+# nodes — see rendered_content_service tests), and a "label" immediately
+# followed by "link" (promo/CTA banner tiles, e.g. "BAREEZE PRET SALE").
+# Plain object keys or CSS elsewhere in the page won't have either pair
+# side by side, so this stays reasonably well-scoped despite matching two
+# key names. Quotes may be backslash-escaped (\") when the JSON is itself
+# embedded as a string literal inside a larger hydration payload, hence the
+# \\* before each quote below.
 _MENU_NODE_RE = re.compile(
-    r'\\*"name\\*"\s*:\s*\\*"((?:[^"\\]|\\.){1,60}?)\\*"\s*,\s*\\*"handle\\*"'
+    r'\\*"(?:name|label)\\*"\s*:\s*\\*"((?:[^"\\]|\\.){1,60}?)\\*"\s*,\s*\\*"(?:handle|link)\\*"'
 )
-_MAX_EMBEDDED_NAMES = 40
+_MAX_EMBEDDED_NAMES = 200
 
 
 class RenderedContentError(Exception):

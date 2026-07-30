@@ -39,6 +39,25 @@ export default function BattlecardsPage() {
     })();
   }, [workspaceId, load]);
 
+  // The competitor list here is fetched once on mount, so a competitor
+  // deleted from a different page/tab wouldn't disappear from an
+  // already-open Battlecards tab until the next full reload. Refetching on
+  // focus keeps it in sync without polling.
+  useEffect(() => {
+    if (!workspaceId) return;
+    function handleFocus() {
+      if (document.visibilityState === "visible") {
+        void load(workspaceId!);
+      }
+    }
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, [workspaceId, load]);
+
   async function loadBattlecard(competitorId: number) {
     if (!workspaceId) return;
     try {
