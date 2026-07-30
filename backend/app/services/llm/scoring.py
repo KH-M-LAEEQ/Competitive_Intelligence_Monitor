@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.models.llm_usage import TokenUsageLog, LLMUsagePurpose
+from app.services.budget_service import check_budget
 from app.services.llm.client import LLMClient
 from app.services.llm.prompts import MATERIALITY_SYSTEM_PROMPT, materiality_user_prompt
 from app.services.prompt_guard import scan_for_injection_markers
@@ -34,6 +35,8 @@ def score_and_classify(
             "Possible prompt-injection markers in scraped content (workspace %s): %s",
             workspace_id, markers,
         )
+
+    check_budget(db, workspace_id)
 
     result = llm_client.complete(
         system=MATERIALITY_SYSTEM_PROMPT,

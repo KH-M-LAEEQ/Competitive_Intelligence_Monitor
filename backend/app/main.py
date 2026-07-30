@@ -16,6 +16,9 @@ from app.routers import battlecards
 from app.routers import response_library
 from app.routers import integrations
 from app.routers import company_profiles
+from app.routers import exports
+from app.routers import gdpr
+from app.routers import budget
 from app.scheduler import start_scheduler, stop_scheduler
 
 
@@ -49,6 +52,9 @@ app.include_router(battlecards.router)
 app.include_router(response_library.router)
 app.include_router(integrations.router)
 app.include_router(company_profiles.router)
+app.include_router(exports.router)
+app.include_router(gdpr.router)
+app.include_router(budget.router)
 @app.get("/")
 def home():
     return {

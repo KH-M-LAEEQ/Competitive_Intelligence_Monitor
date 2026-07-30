@@ -9,6 +9,7 @@ from app.models.approval_item import ApprovalItem, ApprovalItemType, ApprovalSta
 from app.models.change_log import ChangeLog
 from app.models.competitor import Competitor
 from app.models.llm_usage import TokenUsageLog, LLMUsagePurpose
+from app.services.budget_service import check_budget
 from app.services.llm.client import LLMClient
 from app.services.llm.prompts import UNTRUSTED_CONTENT_PREAMBLE, wrap_untrusted
 
@@ -105,6 +106,8 @@ def draft_update_from_change_logs(
         f"{battlecard.content_markdown or '(empty — this is the first entry)'}\n\n"
         f"RECENT CHANGES:\n{wrap_untrusted(chr(10).join(lines))}"
     )
+
+    check_budget(db, workspace_id)
 
     result = llm_client.complete(
         system=_SYSTEM_PROMPT, user=user_prompt, response_model=BattlecardDraft

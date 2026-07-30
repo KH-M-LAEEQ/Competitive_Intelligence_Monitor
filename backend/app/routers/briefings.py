@@ -6,9 +6,10 @@ from app.models.briefing import Briefing
 from app.models.user import User
 from app.models.workspace_member import WorkspaceMember, WorkspaceRole
 from app.schemas.briefing import GenerateBriefingRequest, BriefingResponse
-from app.dependencies import get_current_user, get_current_workspace, require_role
+from app.dependencies import get_current_user, get_current_workspace, require_role, rate_limit
 from app.services.llm.factory import get_llm_client
 from app.services.briefing_service import generate_briefing, NoMatchingChangeLogs
+from app.services.budget_service import BudgetExceededError
 
 router = APIRouter(
     prefix="/workspaces/{workspace_id}/briefings",
@@ -25,7 +26,8 @@ def generate_now(
     payload: GenerateBriefingRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    membership: WorkspaceMember = Depends(require_role(WorkspaceRole.owner, WorkspaceRole.editor))
+    membership: WorkspaceMember = Depends(require_role(WorkspaceRole.owner, WorkspaceRole.editor)),
+    _rate_limit: None = Depends(rate_limit("briefing-generate"))
 ):
 
     llm_client = get_llm_client()
@@ -43,6 +45,8 @@ def generate_now(
         )
     except NoMatchingChangeLogs as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except BudgetExceededError as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
 
     return briefing
 

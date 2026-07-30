@@ -8,9 +8,10 @@ from app.models.change_log import ChangeLog
 from app.models.competitor import Competitor
 from app.models.workspace_member import WorkspaceMember
 from app.schemas.insight import TrendsResponse, SimilarChangeResponse
-from app.dependencies import get_current_workspace
+from app.dependencies import get_current_workspace, rate_limit
 from app.services.llm.factory import get_llm_client
 from app.services.synthesis import generate_cross_competitor_summary, find_similar_changes
+from app.services.budget_service import BudgetExceededError
 
 router = APIRouter(
     prefix="/workspaces/{workspace_id}/insights",
@@ -26,7 +27,8 @@ def get_trends(
     workspace_id: int,
     days: int = 14,
     db: Session = Depends(get_db),
-    membership: WorkspaceMember = Depends(get_current_workspace)
+    membership: WorkspaceMember = Depends(get_current_workspace),
+    _rate_limit: None = Depends(rate_limit("insights-trends"))
 ):
 
     llm_client = get_llm_client()
@@ -34,7 +36,13 @@ def get_trends(
         return TrendsResponse(summary=None, based_on=0)
 
     since = datetime.utcnow() - timedelta(days=days)
-    outcome = generate_cross_competitor_summary(db, llm_client, workspace_id, since)
+    try:
+        outcome = generate_cross_competitor_summary(db, llm_client, workspace_id, since)
+    except BudgetExceededError:
+        # A dashboard "insight" endpoint degrading to no-summary is a much
+        # better UX than a GET request erroring out — unlike an explicit
+        # user action (generate a briefing), nobody is blocked by this.
+        return TrendsResponse(summary=None, based_on=0)
     db.commit()
 
     if outcome is None:

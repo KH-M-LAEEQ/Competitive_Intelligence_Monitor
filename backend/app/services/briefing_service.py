@@ -8,6 +8,7 @@ from app.models.approval_item import ApprovalItem, ApprovalItemType, ApprovalSta
 from app.models.change_log import ChangeLog
 from app.models.competitor import Competitor
 from app.models.llm_usage import TokenUsageLog, LLMUsagePurpose
+from app.services.budget_service import check_budget
 from app.services.llm.client import LLMClient
 from app.services.llm.prompts import UNTRUSTED_CONTENT_PREAMBLE, wrap_untrusted
 
@@ -76,6 +77,8 @@ def generate_briefing(
         f"{change_log.rationale or (change_log.diff or '')[:300]}"
         for change_log, competitor_name in rows
     ]
+
+    check_budget(db, workspace_id)
 
     result = llm_client.complete(
         system=_system_prompt(audience.value),

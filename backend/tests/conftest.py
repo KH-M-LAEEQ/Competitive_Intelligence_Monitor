@@ -28,6 +28,7 @@ from app.models.battlecard_update import BattlecardUpdate  # noqa: F401
 from app.models.response_library import ResponseLibraryItem  # noqa: F401
 from app.models.workspace_integration import WorkspaceIntegration  # noqa: F401
 from app.models.company_profile import CompanyProfile  # noqa: F401
+from app.services.rate_limiter import reset_rate_limits
 
 
 @pytest.fixture()
@@ -69,6 +70,12 @@ def client(db_session, monkeypatch):
     # that specifically exercise LLM behavior monkeypatch this again
     # themselves with a fake client, which overrides this default.
     monkeypatch.setattr("app.services.check_service.get_llm_client", lambda: None)
+
+    # Rate-limiter state is a module-level dict shared across the whole
+    # pytest process, but every test gets a fresh in-memory DB (workspace
+    # ids restart at 1 each time) — without resetting here, an unrelated
+    # earlier test's hits against "workspace 1" would leak into this one.
+    reset_rate_limits()
 
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:

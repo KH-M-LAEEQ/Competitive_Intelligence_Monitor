@@ -21,6 +21,19 @@ class Settings(BaseSettings):
     smtp_from_email: str | None = None
 
     snapshot_storage_path: str = "./storage"
+
+    # Blended estimate applied to (prompt_tokens + completion_tokens) from
+    # every TokenUsageLog row — NIM's community API pricing isn't published
+    # per-token the way OpenAI's is, so this is a conservative placeholder
+    # rate a deployer should tune to their actual plan. Defaulting it to a
+    # small non-zero value (rather than 0) means WorkspaceBudget enforcement
+    # is exercised out of the box instead of silently doing nothing until
+    # someone remembers to configure it.
+    llm_cost_per_1k_tokens_usd: float = 0.002
+
+    rate_limit_llm_requests: int = 20
+    rate_limit_llm_window_seconds: float = 60.0
+
     cors_origins: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",

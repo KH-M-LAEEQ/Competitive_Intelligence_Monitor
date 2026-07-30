@@ -8,7 +8,7 @@ from app.models.check_run import CheckRun
 from app.models.workspace_member import WorkspaceMember, WorkspaceRole
 from app.schemas.surface import SurfaceCreate, SurfaceResponse
 from app.schemas.check_run import CheckRunResponse
-from app.dependencies import get_current_workspace, require_role
+from app.dependencies import get_current_workspace, require_role, rate_limit
 from app.services.check_service import run_surface_check, FetchError
 from app.scheduler import schedule_surface, unschedule_surface
 
@@ -119,7 +119,8 @@ def check_surface(
     competitor_id: int,
     surface_id: int,
     db: Session = Depends(get_db),
-    membership: WorkspaceMember = Depends(require_role(WorkspaceRole.owner, WorkspaceRole.editor))
+    membership: WorkspaceMember = Depends(require_role(WorkspaceRole.owner, WorkspaceRole.editor)),
+    _rate_limit: None = Depends(rate_limit("surface-check"))
 ):
 
     _get_owned_competitor(db, workspace_id, competitor_id)

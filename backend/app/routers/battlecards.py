@@ -10,9 +10,10 @@ from app.models.workspace_member import WorkspaceMember, WorkspaceRole
 from app.schemas.battlecard import (
     ProposeBattlecardUpdateRequest, BattlecardResponse, BattlecardUpdateResponse
 )
-from app.dependencies import get_current_user, get_current_workspace, require_role
+from app.dependencies import get_current_user, get_current_workspace, require_role, rate_limit
 from app.services.llm.factory import get_llm_client
 from app.services.battlecard_service import draft_update_from_change_logs, NoMatchingChangeLogs
+from app.services.budget_service import BudgetExceededError
 
 router = APIRouter(
     prefix="/workspaces/{workspace_id}/competitors/{competitor_id}/battlecard",
@@ -65,7 +66,8 @@ def propose_update(
     payload: ProposeBattlecardUpdateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    membership: WorkspaceMember = Depends(require_role(WorkspaceRole.owner, WorkspaceRole.editor))
+    membership: WorkspaceMember = Depends(require_role(WorkspaceRole.owner, WorkspaceRole.editor)),
+    _rate_limit: None = Depends(rate_limit("battlecard-propose"))
 ):
 
     _get_owned_competitor(db, workspace_id, competitor_id)
@@ -81,6 +83,8 @@ def propose_update(
         )
     except NoMatchingChangeLogs as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except BudgetExceededError as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
 
     return update
 

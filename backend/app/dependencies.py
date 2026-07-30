@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.models.workspace_member import WorkspaceMember, WorkspaceRole
+from app.core.config import settings
 from app.core.security import decode_access_token
+from app.services.rate_limiter import check_rate_limit, RateLimitExceededError
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/auth/login"
@@ -87,5 +89,28 @@ def require_role(*roles: WorkspaceRole):
             )
 
         return membership
+
+    return _check
+
+
+def rate_limit(scope: str, limit: int | None = None, window_seconds: float | None = None):
+    """FastAPI dependency factory — each `scope` gets its own bucket per
+    workspace, so a burst against one LLM-triggering endpoint doesn't eat
+    into another's allowance. Defaults come from Settings so a deployer can
+    tune the shared rate without touching call sites.
+    """
+
+    def _check(
+        membership: WorkspaceMember = Depends(get_current_workspace)
+    ) -> None:
+        key = f"{scope}:{membership.workspace_id}"
+        try:
+            check_rate_limit(
+                key,
+                limit if limit is not None else settings.rate_limit_llm_requests,
+                window_seconds if window_seconds is not None else settings.rate_limit_llm_window_seconds,
+            )
+        except RateLimitExceededError as exc:
+            raise HTTPException(status_code=429, detail=str(exc))
 
     return _check
