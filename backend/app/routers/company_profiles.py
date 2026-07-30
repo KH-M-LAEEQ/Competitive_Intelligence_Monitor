@@ -83,6 +83,7 @@ def upsert_profile(
             funding_stage=payload.funding_stage,
             key_people=key_people,
             notes_markdown=payload.notes_markdown,
+            website_domain=payload.website_domain,
         )
         db.add(profile)
     else:
@@ -92,6 +93,7 @@ def upsert_profile(
         profile.funding_stage = payload.funding_stage
         profile.key_people = key_people
         profile.notes_markdown = payload.notes_markdown
+        profile.website_domain = payload.website_domain
 
     db.commit()
     db.refresh(profile)

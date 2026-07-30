@@ -5,7 +5,9 @@ from app.database import get_db
 from app.models.workspace_member import WorkspaceMember, WorkspaceRole
 from app.schemas.workspace_budget import WorkspaceBudgetResponse, WorkspaceBudgetUpdate
 from app.dependencies import get_current_workspace, require_role
-from app.services.budget_service import get_or_create_budget, estimate_spend_usd
+from app.services.budget_service import (
+    get_or_create_budget, estimate_spend_usd, estimate_spend_by_purpose
+)
 
 router = APIRouter(
     prefix="/workspaces/{workspace_id}/budget",
@@ -15,12 +17,14 @@ router = APIRouter(
 
 def _to_response(db: Session, budget) -> WorkspaceBudgetResponse:
     spend = estimate_spend_usd(db, budget.workspace_id, since=budget.period_start)
+    by_purpose = estimate_spend_by_purpose(db, budget.workspace_id, since=budget.period_start)
     return WorkspaceBudgetResponse(
         workspace_id=budget.workspace_id,
         monthly_cap_usd=budget.monthly_cap_usd,
         period_start=budget.period_start,
         alert_threshold_pct=budget.alert_threshold_pct,
         estimated_spend_usd=spend,
+        spend_by_purpose=by_purpose,
     )
 
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, FormEvent } from "react";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useWorkspaceContext } from "@/lib/workspace-context";
@@ -9,7 +9,10 @@ import {
   Briefing,
   ChangeLog,
   Competitor,
+  CompetitorSummary,
+  OwnSite,
   Surface,
+  WorkspaceBudget,
 } from "@/lib/types";
 import ClassificationBadge, { classificationColor } from "@/components/ui/ClassificationBadge";
 import DonutChart from "@/components/charts/DonutChart";
@@ -33,8 +36,57 @@ const CLASS_LABELS: Record<string, string> = {
   other: "Other",
 };
 
+const PURPOSE_COLORS: Record<string, string> = {
+  scoring: "#FFB020",
+  briefing: "#4EA8FF",
+  embedding: "#FF6B81",
+  classification: "#35D6A4",
+};
+const PURPOSE_LABELS: Record<string, string> = {
+  scoring: "Materiality scoring",
+  briefing: "Briefings & battlecards",
+  embedding: "Embeddings",
+  classification: "Classification",
+};
+
 interface CheckRun {
   status: "running" | "success" | "failed";
+}
+
+interface ComparisonRow {
+  id: number;
+  name: string;
+  isOwnSite: boolean;
+  changesDetected: number;
+  materialCount: number;
+  avgMateriality: number | null;
+  dominantClassification: string | null;
+  lastChangeAt: string | null;
+}
+
+function summarizeLogs(logs: ChangeLog[]): Omit<ComparisonRow, "id" | "name" | "isOwnSite"> {
+  const scored = logs.filter((l) => l.materiality_score !== null);
+  const material = scored.filter((l) => (l.materiality_score ?? 0) >= 50);
+  const classCounts: Record<string, number> = {};
+  for (const l of logs) {
+    if (l.classification) classCounts[l.classification] = (classCounts[l.classification] ?? 0) + 1;
+  }
+  const dominant = Object.entries(classCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const lastChangeAt =
+    logs.length > 0
+      ? logs.reduce((latest, l) => (l.created_at > latest ? l.created_at : latest), logs[0].created_at)
+      : null;
+
+  return {
+    changesDetected: logs.length,
+    materialCount: material.length,
+    avgMateriality:
+      scored.length > 0
+        ? scored.reduce((sum, l) => sum + (l.materiality_score ?? 0), 0) / scored.length
+        : null,
+    dominantClassification: dominant,
+    lastChangeAt,
+  };
 }
 
 function dayKey(iso: string) {
@@ -42,7 +94,7 @@ function dayKey(iso: string) {
 }
 
 export default function DashboardPage() {
-  const { workspaceId, ready: contextReady } = useWorkspaceContext();
+  const { workspaceId, ready: contextReady, canEdit } = useWorkspaceContext();
   const [nowMs] = useState(() => Date.now());
 
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
@@ -50,21 +102,56 @@ export default function DashboardPage() {
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [briefings, setBriefings] = useState<Briefing[]>([]);
   const [checkRuns, setCheckRuns] = useState<CheckRun[]>([]);
+  const [budget, setBudget] = useState<WorkspaceBudget | null>(null);
+  const [ownSite, setOwnSite] = useState<OwnSite | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [newCompetitorName, setNewCompetitorName] = useState("");
+  const [creatingCompetitor, setCreatingCompetitor] = useState(false);
+  const [ownSiteUrl, setOwnSiteUrl] = useState("");
+  const [savingOwnSite, setSavingOwnSite] = useState(false);
+  const [ownSiteSummary, setOwnSiteSummary] = useState<CompetitorSummary | null>(null);
+
   const load = useCallback(async (wsId: number) => {
     try {
-      const [comps, logs, allApprovals, briefingList] = await Promise.all([
+      const [comps, logs, allApprovals, briefingList, budgetData, ownSiteData] = await Promise.all([
         apiFetch(`/workspaces/${wsId}/competitors/`),
         apiFetch(`/workspaces/${wsId}/change-logs/`),
         apiFetch(`/workspaces/${wsId}/approvals/`),
         apiFetch(`/workspaces/${wsId}/briefings/`),
+        apiFetch(`/workspaces/${wsId}/budget/`),
+        apiFetch(`/workspaces/${wsId}/own-site/`).catch(() => null),
       ]);
       setCompetitors(comps);
-      setChangeLogs(logs);
+      // The change-logs endpoint isn't filtered by is_own_site — exclude
+      // your own site's changes here so it never silently inflates the
+      // dashboard's competitor-facing aggregate stats (it gets its own row
+      // in the comparison table instead).
+      const ownSiteCompetitorId = ownSiteData?.competitor_id ?? null;
+      setChangeLogs(
+        ownSiteCompetitorId === null
+          ? logs
+          : logs.filter((l: ChangeLog) => l.competitor_id !== ownSiteCompetitorId)
+      );
       setApprovals(allApprovals);
       setBriefings(briefingList);
+      setBudget(budgetData);
+      setOwnSite(ownSiteData);
+      setOwnSiteUrl(ownSiteData?.url ?? "");
+
+      if (ownSiteCompetitorId !== null) {
+        try {
+          const comparison = await apiFetch(
+            `/workspaces/${wsId}/competitors/${ownSiteCompetitorId}/comparison`
+          );
+          setOwnSiteSummary(comparison.change_summary);
+        } catch {
+          setOwnSiteSummary(null);
+        }
+      } else {
+        setOwnSiteSummary(null);
+      }
 
       const perCompetitorSurfaces = await Promise.all(
         comps.map(async (c: Competitor) => {
@@ -98,6 +185,47 @@ export default function DashboardPage() {
       await load(workspaceId);
     })();
   }, [workspaceId, load]);
+
+  async function handleAddCompetitor(e: FormEvent) {
+    e.preventDefault();
+    if (!workspaceId || !newCompetitorName.trim()) return;
+
+    setCreatingCompetitor(true);
+    setError(null);
+    try {
+      await apiFetch(`/workspaces/${workspaceId}/competitors/`, {
+        method: "POST",
+        body: JSON.stringify({ name: newCompetitorName.trim() }),
+      });
+      setNewCompetitorName("");
+      await load(workspaceId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to add competitor");
+    } finally {
+      setCreatingCompetitor(false);
+    }
+  }
+
+  async function handleSaveOwnSite(e: FormEvent) {
+    e.preventDefault();
+    if (!workspaceId || !ownSiteUrl.trim()) return;
+
+    setSavingOwnSite(true);
+    setError(null);
+    try {
+      const result = await apiFetch(`/workspaces/${workspaceId}/own-site/`, {
+        method: "PUT",
+        body: JSON.stringify({ url: ownSiteUrl.trim() }),
+      });
+      setOwnSite(result);
+      setOwnSiteUrl(result.url);
+      await load(workspaceId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save your website");
+    } finally {
+      setSavingOwnSite(false);
+    }
+  }
 
   const changesLast30d = useMemo(() => {
     const since = nowMs - 30 * 24 * 60 * 60 * 1000;
@@ -152,6 +280,18 @@ export default function DashboardPage() {
     return Object.entries(buckets).map(([date, v]) => ({ date, ...v }));
   }, [changeLogs, nowMs]);
 
+  const costBreakdownData = useMemo(() => {
+    const byPurpose = budget?.spend_by_purpose ?? {};
+    return Object.entries(byPurpose)
+      .filter(([, cost]) => cost > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([purpose, cost]) => ({
+        label: PURPOSE_LABELS[purpose] ?? purpose,
+        count: cost,
+        color: PURPOSE_COLORS[purpose] ?? "#8A93A0",
+      }));
+  }, [budget]);
+
   const classificationData = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const log of changeLogs) {
@@ -167,18 +307,32 @@ export default function DashboardPage() {
       }));
   }, [changeLogs]);
 
-  const movesByCompetitor = useMemo(() => {
-    const counts: Record<number, number> = {};
-    for (const log of changeLogs) {
-      counts[log.competitor_id] = (counts[log.competitor_id] ?? 0) + 1;
+  const comparisonTable: ComparisonRow[] = useMemo(() => {
+    const rows: ComparisonRow[] = competitors.map((c) => ({
+      id: c.id,
+      name: c.name,
+      isOwnSite: false,
+      ...summarizeLogs(changeLogs.filter((l) => l.competitor_id === c.id)),
+    }));
+
+    rows.sort((a, b) => b.changesDetected - a.changesDetected);
+
+    if (ownSite && ownSiteSummary) {
+      rows.unshift({
+        id: ownSite.competitor_id,
+        name: "Your website",
+        isOwnSite: true,
+        changesDetected: ownSiteSummary.total_changes,
+        materialCount: ownSiteSummary.material_count,
+        avgMateriality: ownSiteSummary.avg_materiality,
+        dominantClassification:
+          Object.entries(ownSiteSummary.classification_counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null,
+        lastChangeAt: ownSiteSummary.last_change_at,
+      });
     }
-    const rows = competitors
-      .map((c) => ({ name: c.name, count: counts[c.id] ?? 0 }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 6);
-    const max = Math.max(1, ...rows.map((r) => r.count));
-    return rows.map((r) => ({ ...r, pct: (r.count / max) * 100 }));
-  }, [changeLogs, competitors]);
+
+    return rows;
+  }, [changeLogs, competitors, ownSite, ownSiteSummary]);
 
   const topMoves = useMemo(
     () =>
@@ -244,6 +398,76 @@ export default function DashboardPage() {
         <p className="rounded-lg bg-red-950/50 px-3 py-2 text-sm text-red-300">{error}</p>
       )}
 
+      <Card>
+        <div className="flex items-center justify-between">
+          <h2 className="m-0 text-[14.5px] font-semibold tracking-[-0.01em]">Competitors</h2>
+          <span className="font-mono text-[11px] text-[var(--text-faint)]">
+            Click a competitor to add the pages you want watched
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {competitors.length === 0 ? (
+            <p className="text-sm text-[var(--text-faint)]">
+              No competitors yet — add one below to get started.
+            </p>
+          ) : (
+            competitors.map((c) => (
+              <Link
+                key={c.id}
+                href={`/competitors/${c.id}`}
+                className="rounded-lg border border-[var(--border-input)] bg-[var(--bg-nested)] px-3 py-1.5 text-[12.5px] font-medium text-[var(--text-secondary)] hover:border-[var(--border-hover)] hover:text-[var(--text-primary)]"
+              >
+                {c.name}
+              </Link>
+            ))
+          )}
+        </div>
+        {canEdit && (
+          <form onSubmit={handleAddCompetitor} className="flex items-center gap-2">
+            <input
+              value={newCompetitorName}
+              onChange={(e) => setNewCompetitorName(e.target.value)}
+              placeholder="Competitor name"
+              className="h-8 flex-1 max-w-xs rounded-lg border border-[var(--border-input)] bg-[var(--bg-input)] px-3 text-xs text-[var(--text-primary)]"
+            />
+            <button
+              type="submit"
+              disabled={creatingCompetitor || !newCompetitorName.trim()}
+              className="h-8 rounded-lg bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-on)] disabled:opacity-50"
+            >
+              {creatingCompetitor ? "Adding..." : "Add competitor"}
+            </button>
+          </form>
+        )}
+
+        <div className="flex flex-col gap-2 border-t border-[var(--border-subtle)] pt-4">
+          <span className="font-mono text-[9.5px] uppercase tracking-[.13em] text-[var(--text-dim)]">
+            Your website — the benchmark every competitor is measured against
+          </span>
+          {canEdit ? (
+            <form onSubmit={handleSaveOwnSite} className="flex items-center gap-2">
+              <input
+                value={ownSiteUrl}
+                onChange={(e) => setOwnSiteUrl(e.target.value)}
+                placeholder="https://yourcompany.com"
+                className="h-8 flex-1 max-w-xs rounded-lg border border-[var(--border-input)] bg-[var(--bg-input)] px-3 text-xs text-[var(--text-primary)]"
+              />
+              <button
+                type="submit"
+                disabled={savingOwnSite || !ownSiteUrl.trim()}
+                className="h-8 rounded-lg bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-on)] disabled:opacity-50"
+              >
+                {savingOwnSite ? "Saving..." : ownSite ? "Update" : "Set your website"}
+              </button>
+            </form>
+          ) : (
+            <span className="text-sm text-[var(--text-faint)]">
+              {ownSite ? ownSite.url : "Not set"}
+            </span>
+          )}
+        </div>
+      </Card>
+
       <div className="grid grid-cols-2 gap-[14px] lg:grid-cols-4">
         <StatTile
           label="Changes detected"
@@ -308,54 +532,25 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-[14px] lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-[14px] lg:grid-cols-2">
         <Card>
           <div className="flex flex-col gap-[5px]">
-            <h2 className="m-0 text-[14.5px] font-semibold tracking-[-0.01em]">
-              Material moves by competitor
-            </h2>
-            <p className="m-0 text-[11.5px] text-[var(--text-faint)]">All time</p>
+            <h2 className="m-0 text-[14.5px] font-semibold tracking-[-0.01em]">LLM cost breakdown</h2>
+            <p className="m-0 text-[11.5px] text-[var(--text-faint)]">
+              Real spend since {budget ? new Date(budget.period_start).toLocaleDateString() : "—"}
+            </p>
           </div>
-          <div className="flex flex-col gap-[13px]">
-            {movesByCompetitor.length === 0 ? (
-              <p className="text-xs text-[var(--text-faint)]">No changes yet.</p>
-            ) : (
-              movesByCompetitor.map((row) => (
-                <div key={row.name} className="flex items-center gap-3">
-                  <span className="w-[78px] flex-shrink-0 truncate text-[12.5px] text-[var(--text-secondary)]">
-                    {row.name}
-                  </span>
-                  <div className="h-[9px] flex-1 overflow-hidden rounded-full bg-[var(--bg-track)]">
-                    <div
-                      className="h-full rounded-full bg-[var(--accent)]"
-                      style={{ width: `${Math.max(row.pct, 4)}%` }}
-                    />
-                  </div>
-                  <span className="w-5 flex-shrink-0 text-right font-mono text-[11.5px] text-[var(--text-muted)]">
-                    {row.count}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex flex-col gap-[5px]">
-            <h2 className="m-0 text-[14.5px] font-semibold tracking-[-0.01em]">Unit cost breakdown</h2>
-            <p className="m-0 text-[11.5px] text-[var(--text-faint)]">$39/mo reference, hosted-API stack</p>
-          </div>
-          <DonutChart
-            data={[
-              { label: "Crawling", count: 14, color: "#FFB020" },
-              { label: "LLM briefings", count: 14, color: "#4EA8FF" },
-              { label: "Hosting", count: 6, color: "#8B7BFF" },
-              { label: "LLM scoring", count: 4, color: "#35D6A4" },
-              { label: "Embeddings", count: 1, color: "#FF6B81" },
-            ]}
-            centerValue="$39"
-            centerLabel="per mo"
-          />
+          {costBreakdownData.length === 0 ? (
+            <p className="text-xs text-[var(--text-faint)]">
+              No LLM usage yet — run a check or generate a briefing to see real spend here.
+            </p>
+          ) : (
+            <DonutChart
+              data={costBreakdownData}
+              centerValue={`$${(budget?.estimated_spend_usd ?? 0).toFixed(4)}`}
+              centerLabel="spent"
+            />
+          )}
         </Card>
 
         <Card>
@@ -387,6 +582,81 @@ export default function DashboardPage() {
           </div>
         </Card>
       </div>
+
+      <Card>
+        <div className="flex items-center justify-between">
+          <h2 className="m-0 text-[14.5px] font-semibold tracking-[-0.01em]">
+            Competitor comparison
+          </h2>
+          <p className="m-0 text-[11.5px] text-[var(--text-faint)]">
+            {ownSite ? "Your website pinned at top" : "All time"}
+          </p>
+        </div>
+        {comparisonTable.length === 0 ? (
+          <p className="text-sm text-[var(--text-faint)]">
+            No competitors yet — add one above to get started.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse">
+              <thead>
+                <tr className="border-b border-[var(--border-subtle)] font-mono text-[9.5px] uppercase tracking-[.13em] text-[var(--text-dimmer)]">
+                  <th className="px-1 pb-[9px] text-left font-normal">Name</th>
+                  <th className="px-1 pb-[9px] text-right font-normal">Changes</th>
+                  <th className="px-1 pb-[9px] text-right font-normal">Material</th>
+                  <th className="px-1 pb-[9px] text-right font-normal">Avg materiality</th>
+                  <th className="px-1 pb-[9px] text-left font-normal">Dominant type</th>
+                  <th className="px-1 pb-[9px] text-right font-normal">Last change</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparisonTable.map((row, i) => (
+                  <tr
+                    key={row.id}
+                    style={{
+                      borderBottom:
+                        i < comparisonTable.length - 1 ? "1px solid var(--border-subtler)" : undefined,
+                      background: row.isOwnSite ? "var(--accent-wash)" : undefined,
+                    }}
+                  >
+                    <td className="px-1 py-[11px] text-[12.5px] font-medium">
+                      {row.isOwnSite ? (
+                        <span className="text-[var(--accent)]">{row.name}</span>
+                      ) : (
+                        <Link
+                          href={`/competitors/${row.id}/compare`}
+                          className="hover:text-[var(--accent)] hover:underline"
+                        >
+                          {row.name}
+                        </Link>
+                      )}
+                    </td>
+                    <td className="px-1 py-[11px] text-right font-mono text-[12px] text-[var(--text-secondary)]">
+                      {row.changesDetected}
+                    </td>
+                    <td className="px-1 py-[11px] text-right font-mono text-[12px] text-[var(--text-secondary)]">
+                      {row.materialCount}
+                    </td>
+                    <td className="px-1 py-[11px] text-right font-mono text-[12px] text-[var(--text-secondary)]">
+                      {row.avgMateriality !== null ? (row.avgMateriality / 100).toFixed(2) : "—"}
+                    </td>
+                    <td className="px-1 py-[11px] text-[12px]">
+                      {row.dominantClassification ? (
+                        <ClassificationBadge classification={row.dominantClassification} />
+                      ) : (
+                        <span className="text-[var(--text-faint)]">—</span>
+                      )}
+                    </td>
+                    <td className="px-1 py-[11px] text-right font-mono text-[11px] text-[var(--text-faint)]">
+                      {row.lastChangeAt ? new Date(row.lastChangeAt).toLocaleDateString() : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <Card>
         <div className="flex items-center justify-between">

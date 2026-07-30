@@ -33,3 +33,61 @@ def materiality_user_prompt(surface_label: str, diff_text: str) -> str:
         f"Surface being watched: {surface_label}\n\n"
         f"Diff of the change detected:\n{wrap_untrusted(diff_text)}"
     )
+
+
+SITE_SUMMARY_SYSTEM_PROMPT = (
+    "You are a competitive intelligence analyst. You are given the current "
+    "raw text content of one or more pages from a competitor's website — "
+    "not a diff, just what's on their site right now. Extract two things:\n\n"
+    "1. Product or service categories they offer, as short labels (e.g. "
+    "\"Men's\", \"Women's\", \"Kids\", \"Perfumes\", \"Accessories\") — only "
+    "ones actually named on the page, not inferred or guessed.\n"
+    "2. Any current promotions, sales, or special offers stated on the page "
+    "(e.g. \"Azadi Sale — flat 40% off\"), including the discount or detail "
+    "as stated.\n\n"
+    "If the content doesn't clearly show categories or offers, return an "
+    "empty list for that field rather than guessing or inventing one.\n\n"
+    f"{UNTRUSTED_CONTENT_PREAMBLE}\n\n"
+    "Respond with ONLY a single JSON object, no other text, matching this "
+    "shape:\n"
+    '{"categories": [<short strings>], "current_offers": [<short strings>]}'
+)
+
+
+def site_summary_user_prompt(pages: list[tuple[str, str]]) -> str:
+    """`pages` is a list of (label, text_content) pairs, one per surface —
+    e.g. [("pricing — https://rival.com/pricing", "...")].
+    """
+    sections = "\n\n".join(
+        f"--- {label} ---\n{wrap_untrusted(text)}" for label, text in pages
+    )
+    return f"Pages currently on this competitor's site:\n\n{sections}"
+
+
+CATEGORY_PRICE_SYSTEM_PROMPT = (
+    "You are a competitive intelligence analyst. You are given the raw text "
+    "content of a product listing page from a competitor's website. Extract "
+    "every price actually shown for a product on this page.\n\n"
+    "Rules:\n"
+    "- Only include prices explicitly stated on the page — never estimate, "
+    "average, or invent one.\n"
+    "- If a product shows both an original and a discounted price, use the "
+    "discounted (current selling) price, not the crossed-out original.\n"
+    "- Report each price as a plain number with no currency symbol or "
+    "thousands separators (e.g. 2500, not \"Rs. 2,500\").\n"
+    "- Note the currency (e.g. \"PKR\", \"USD\") if it's stated anywhere on "
+    "the page; if unclear, leave it null rather than guessing.\n"
+    "- If this page has no visible product prices at all (e.g. it's a "
+    "landing page, not a listing), return an empty list.\n\n"
+    f"{UNTRUSTED_CONTENT_PREAMBLE}\n\n"
+    "Respond with ONLY a single JSON object, no other text, matching this "
+    "shape:\n"
+    '{"prices": [<numbers>], "currency": <string or null>}'
+)
+
+
+def category_price_user_prompt(category: str, page_text: str) -> str:
+    return (
+        f"Category being priced: {category}\n\n"
+        f"Listing page content:\n{wrap_untrusted(page_text)}"
+    )

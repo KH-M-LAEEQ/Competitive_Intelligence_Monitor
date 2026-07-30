@@ -19,6 +19,10 @@ from app.routers import company_profiles
 from app.routers import exports
 from app.routers import gdpr
 from app.routers import budget
+from app.routers import traffic
+from app.routers import own_site
+from app.routers import site_summary
+from app.routers import category_price
 from app.scheduler import start_scheduler, stop_scheduler
 
 
@@ -55,6 +59,10 @@ app.include_router(company_profiles.router)
 app.include_router(exports.router)
 app.include_router(gdpr.router)
 app.include_router(budget.router)
+app.include_router(traffic.router)
+app.include_router(own_site.router)
+app.include_router(site_summary.router)
+app.include_router(category_price.router)
 @app.get("/")
 def home():
     return {

@@ -36,6 +36,7 @@ export interface Surface {
 export interface Competitor {
   id: number;
   name: string;
+  is_own_site?: boolean;
   created_at: string | null;
 }
 
@@ -155,5 +156,74 @@ export interface CompanyProfile {
   funding_stage: string | null;
   key_people: KeyPerson[] | null;
   notes_markdown: string | null;
+  website_domain: string | null;
   updated_at: string | null;
+}
+
+export interface WorkspaceBudget {
+  workspace_id: number;
+  monthly_cap_usd: number | null;
+  period_start: string;
+  alert_threshold_pct: number | null;
+  estimated_spend_usd: number;
+  spend_by_purpose: Record<string, number>;
+}
+
+export interface OwnSite {
+  competitor_id: number;
+  surface_id: number;
+  url: string;
+  check_frequency: string;
+  last_checked_at: string | null;
+}
+
+export interface TrafficSnapshot {
+  id: number;
+  competitor_id: number;
+  domain: string;
+  month: string;
+  visits: number | null;
+  source: string;
+  fetched_at: string | null;
+}
+
+export interface CompetitorSummary {
+  total_changes: number;
+  material_count: number;
+  avg_materiality: number | null;
+  classification_counts: Record<string, number>;
+  trend: { date: string; detected: number; material: number }[];
+  last_change_at: string | null;
+}
+
+export interface BenchmarkComparison {
+  competitor: Competitor;
+  change_summary: CompetitorSummary;
+  traffic: TrafficSnapshot[] | null;
+}
+
+export interface ComparisonResponse {
+  competitor: Competitor;
+  profile: CompanyProfile | null;
+  battlecard: Battlecard | null;
+  change_summary: CompetitorSummary;
+  traffic: TrafficSnapshot[] | null;
+  benchmark: BenchmarkComparison | null;
+}
+
+export interface SiteSummary {
+  competitor_id: number;
+  categories: string[];
+  current_offers: string[];
+  generated_at: string | null;
+}
+
+export interface CategoryPriceStats {
+  category: string;
+  listing_url: string | null;
+  prices_found: number;
+  min_price: number | null;
+  max_price: number | null;
+  avg_price: number | null;
+  currency: string | null;
 }

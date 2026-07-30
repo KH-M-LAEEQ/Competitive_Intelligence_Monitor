@@ -10,6 +10,7 @@ class CompetitorCreate(BaseModel):
 class CompetitorResponse(BaseModel):
     id: int
     name: str
+    is_own_site: bool = False
     created_at: datetime | None = None
 
     class Config:

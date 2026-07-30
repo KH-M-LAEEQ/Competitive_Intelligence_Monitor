@@ -184,3 +184,22 @@ def test_surface_check_leaves_change_unscored_when_over_budget(client, monkeypat
 
     logs = client.get(f"/workspaces/{workspace['id']}/change-logs/", headers=headers).json()
     assert logs[0]["materiality_score"] is None
+
+
+def test_budget_spend_by_purpose_breaks_down_real_usage(client, monkeypatch):
+    headers = _register_login(client, "owner@example.com")
+    workspace, _, change_log_id = _seed_workspace_with_change_log(client, headers, monkeypatch)
+
+    empty = client.get(f"/workspaces/{workspace['id']}/budget/", headers=headers).json()
+    assert empty["spend_by_purpose"] == {}
+
+    monkeypatch.setattr(briefings_router, "get_llm_client", lambda: _FakeBriefingLLMClient())
+    client.post(
+        f"/workspaces/{workspace['id']}/briefings/generate-now",
+        json={"change_log_ids": [change_log_id]},
+        headers=headers,
+    )
+
+    after = client.get(f"/workspaces/{workspace['id']}/budget/", headers=headers).json()
+    assert after["spend_by_purpose"].get("briefing", 0) > 0
+    assert abs(sum(after["spend_by_purpose"].values()) - after["estimated_spend_usd"]) < 1e-9

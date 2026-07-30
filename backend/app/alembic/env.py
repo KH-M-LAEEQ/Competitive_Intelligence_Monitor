@@ -32,6 +32,8 @@ from app.models.workspace_integration import WorkspaceIntegration  # noqa: E402
 from app.models.company_profile import CompanyProfile  # noqa: E402
 from app.models.check_run import CheckRun  # noqa: E402
 from app.models.change_embedding import ChangeEmbedding  # noqa: E402
+from app.models.traffic_snapshot import TrafficSnapshot  # noqa: E402
+from app.models.competitor_site_summary import CompetitorSiteSummary  # noqa: E402
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -16,6 +16,7 @@ from app.services.visual_diff import compare as compare_screenshots
 from app.services.llm.factory import get_llm_client
 from app.services.llm.scoring import score_and_classify
 from app.services.synthesis import embed_change_log
+from app.services.site_summary_service import generate_site_summary
 
 __all__ = ["run_surface_check", "FetchError"]
 
@@ -131,6 +132,8 @@ def _perform_check(db: Session, surface: Surface) -> dict:
         db.add(new_snapshot)
         db.commit()
 
+        _apply_site_summary(db, surface)
+
         return {"status": "baseline_captured"}
 
     if not has_material_diff(previous_snapshot.text_content, new_text):
@@ -167,6 +170,7 @@ def _perform_check(db: Session, surface: Surface) -> dict:
     db.refresh(change_log)
 
     _apply_embedding(db, surface, change_log)
+    _apply_site_summary(db, surface)
 
     return {"status": "change_detected", "change_log_id": change_log.id}
 
@@ -245,4 +249,36 @@ def _apply_embedding(db: Session, surface: Surface, change_log: ChangeLog) -> No
         db.commit()
     except Exception as exc:  # noqa: BLE001 — deliberately broad, see docstring
         logger.warning("Embedding failed for change_log %s: %s", change_log.id, exc)
+        db.rollback()
+
+
+def _apply_site_summary(db: Session, surface: Surface) -> None:
+    """Best-effort, same graceful-degradation rule as scoring/embedding —
+    runs automatically whenever a surface's content is new (baseline or a
+    detected change), not on 'no_change', so "what's on their site" stays
+    fresh without requiring a manual click, and isn't re-analyzed when
+    nothing actually changed.
+
+    generate_site_summary always uses a JS-rendered fetch, not the plain
+    snapshot text just captured earlier in this same check — an earlier
+    version of this function skipped that render here to save one browser
+    launch per check, but that meant an automatic run could silently
+    overwrite a good, accurate summary with an empty one derived from a
+    JS-empty plain-HTTP snapshot (exactly the failure mode this whole
+    feature exists to avoid). One extra browser launch per surface per
+    check (at most a few times a day) is not a real cost concern.
+    """
+
+    llm_client = get_llm_client()
+    if llm_client is None:
+        return
+
+    competitor = db.query(Competitor).filter(Competitor.id == surface.competitor_id).first()
+    if competitor is None:
+        return
+
+    try:
+        generate_site_summary(db, llm_client, competitor.workspace_id, competitor.id)
+    except Exception as exc:  # noqa: BLE001 — deliberately broad, see docstring
+        logger.warning("Site summary generation failed for competitor %s: %s", competitor.id, exc)
         db.rollback()

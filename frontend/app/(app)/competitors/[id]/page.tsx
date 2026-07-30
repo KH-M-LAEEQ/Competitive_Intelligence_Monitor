@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, FormEvent } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useWorkspaceContext } from "@/lib/workspace-context";
@@ -30,10 +30,12 @@ const labelClass = "font-mono text-[9.5px] uppercase tracking-[.13em] text-[var(
 
 export default function CompetitorDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const competitorId = Number(params.id);
   const { workspaceId, workspace, ready: contextReady, canEdit } = useWorkspaceContext();
 
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [competitor, setCompetitor] = useState<Competitor | null>(null);
   const [surfaces, setSurfaces] = useState<Surface[]>([]);
   const [changeLogs, setChangeLogs] = useState<ChangeLog[]>([]);
@@ -169,6 +171,29 @@ export default function CompetitorDetailPage() {
     }
   }
 
+  async function handleDeleteCompetitor() {
+    if (!workspaceId || !competitor) return;
+    if (
+      !window.confirm(
+        `Delete ${competitor.name}? This permanently removes its surfaces, change history, battlecard, and site summary. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    setDeleting(true);
+    setError(null);
+    try {
+      await apiFetch(`/workspaces/${workspaceId}/competitors/${competitorId}`, {
+        method: "DELETE",
+      });
+      router.push("/");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete competitor");
+      setDeleting(false);
+    }
+  }
+
   async function handleDeleteSurface(surfaceId: number) {
     if (!workspaceId) return;
     try {
@@ -231,12 +256,23 @@ export default function CompetitorDetailPage() {
             <p className="m-0 text-[13.5px] text-[var(--text-muted)]">{workspace.name}</p>
           )}
         </div>
-        <Link
-          href="/"
-          className="h-8 rounded-lg border border-[var(--border-input)] bg-[var(--bg-card)] px-3 text-xs font-medium leading-8 text-[var(--text-secondary)] hover:border-[var(--border-hover)] hover:text-[var(--text-primary)]"
-        >
-          Back to dashboard
-        </Link>
+        <div className="flex items-center gap-2">
+          {canEdit && (
+            <button
+              onClick={handleDeleteCompetitor}
+              disabled={deleting}
+              className="h-8 rounded-lg border border-[var(--red)]/40 px-3 text-xs font-medium text-[var(--red)] disabled:opacity-50"
+            >
+              {deleting ? "Deleting…" : "Delete competitor"}
+            </button>
+          )}
+          <Link
+            href="/"
+            className="h-8 rounded-lg border border-[var(--border-input)] bg-[var(--bg-card)] px-3 text-xs font-medium leading-8 text-[var(--text-secondary)] hover:border-[var(--border-hover)] hover:text-[var(--text-primary)]"
+          >
+            Back to dashboard
+          </Link>
+        </div>
       </div>
 
       {error && (

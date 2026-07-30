@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     rate_limit_llm_requests: int = 20
     rate_limit_llm_window_seconds: float = 60.0
 
+    # Traffic estimates (SimilarWeb) — informational only, not wired into
+    # materiality scoring. None until a deployer configures a real key,
+    # matching the same optional-integration pattern as nvidia_api_key.
+    similarweb_api_key: str | None = None
+    similarweb_base_url: str = "https://api.similarweb.com/v1"
+
     cors_origins: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",

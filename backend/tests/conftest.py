@@ -28,7 +28,10 @@ from app.models.battlecard_update import BattlecardUpdate  # noqa: F401
 from app.models.response_library import ResponseLibraryItem  # noqa: F401
 from app.models.workspace_integration import WorkspaceIntegration  # noqa: F401
 from app.models.company_profile import CompanyProfile  # noqa: F401
+from app.models.traffic_snapshot import TrafficSnapshot  # noqa: F401
+from app.models.competitor_site_summary import CompetitorSiteSummary  # noqa: F401
 from app.services.rate_limiter import reset_rate_limits
+from app.services.rendered_content_service import RenderedContentError
 
 
 @pytest.fixture()
@@ -70,6 +73,20 @@ def client(db_session, monkeypatch):
     # that specifically exercise LLM behavior monkeypatch this again
     # themselves with a fake client, which overrides this default.
     monkeypatch.setattr("app.services.check_service.get_llm_client", lambda: None)
+
+    # generate_site_summary (triggered automatically after every check that
+    # finds new content, and from the manual site-summary refresh) always
+    # tries a real Playwright render first. Without a default here, any test
+    # that configures a fake LLM client for scoring/embedding would also
+    # unknowingly trigger a real, slow browser launch against a fake test
+    # domain. Default to "rendering unavailable" (falls back to the stored
+    # snapshot, same as a real flaky render) — tests that specifically
+    # exercise site-summary/category-price behavior override this themselves
+    # with their own fake content.
+    def _no_render(url):
+        raise RenderedContentError("test default — rendering unavailable")
+    monkeypatch.setattr("app.services.site_summary_service.capture_rendered_text", _no_render)
+    monkeypatch.setattr("app.services.category_price_service.capture_rendered_text", _no_render)
 
     # Rate-limiter state is a module-level dict shared across the whole
     # pytest process, but every test gets a fresh in-memory DB (workspace

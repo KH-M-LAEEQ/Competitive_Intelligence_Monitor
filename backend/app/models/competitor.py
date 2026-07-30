@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey
 from app.base import Base
 
 
@@ -24,6 +24,16 @@ class Competitor(Base):
     name = Column(
         String,
         nullable=False
+    )
+
+    # Marks the single, hidden "this is us" competitor used as the
+    # comparison benchmark (see own_site_service.py) — at most one per
+    # workspace, enforced in that service rather than a DB constraint.
+    # Excluded from the normal competitors list/add-flow.
+    is_own_site = Column(
+        Boolean,
+        nullable=False,
+        default=False
     )
 
     created_at = Column(

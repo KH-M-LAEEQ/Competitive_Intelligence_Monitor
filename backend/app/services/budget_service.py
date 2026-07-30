@@ -7,7 +7,10 @@ from app.core.config import settings
 from app.models.llm_usage import TokenUsageLog
 from app.models.workspace_budget import WorkspaceBudget
 
-__all__ = ["BudgetExceededError", "get_or_create_budget", "estimate_spend_usd", "check_budget"]
+__all__ = [
+    "BudgetExceededError", "get_or_create_budget", "estimate_spend_usd",
+    "estimate_spend_by_purpose", "check_budget",
+]
 
 
 class BudgetExceededError(Exception):
@@ -43,6 +46,34 @@ def estimate_spend_usd(db: Session, workspace_id: int, since: datetime) -> float
     ) or 0
 
     return (total_tokens / 1000.0) * settings.llm_cost_per_1k_tokens_usd
+
+
+def estimate_spend_by_purpose(db: Session, workspace_id: int, since: datetime) -> dict[str, float]:
+    """Real spend broken down by what the tokens were actually spent on
+    (scoring, briefing/battlecard/synthesis drafting, embeddings) — powers
+    the dashboard's cost breakdown chart. Unlike estimate_spend_usd's single
+    total, this groups by TokenUsageLog.purpose so a workspace can see
+    where its budget is actually going.
+    """
+
+    rows = (
+        db.query(
+            TokenUsageLog.purpose,
+            func.coalesce(func.sum(TokenUsageLog.prompt_tokens), 0)
+            + func.coalesce(func.sum(TokenUsageLog.completion_tokens), 0),
+        )
+        .filter(
+            TokenUsageLog.workspace_id == workspace_id,
+            TokenUsageLog.created_at >= since,
+        )
+        .group_by(TokenUsageLog.purpose)
+        .all()
+    )
+
+    return {
+        purpose.value: (tokens / 1000.0) * settings.llm_cost_per_1k_tokens_usd
+        for purpose, tokens in rows
+    }
 
 
 def check_budget(db: Session, workspace_id: int | None) -> None:

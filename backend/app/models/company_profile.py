@@ -29,6 +29,12 @@ class CompanyProfile(Base):
     key_people = Column(JSON, nullable=True)
     notes_markdown = Column(Text, nullable=True)
 
+    # Root domain used for traffic lookups (see traffic_service.py) — kept
+    # separate from Surface.url, since surfaces point at specific pages to
+    # diff for content changes, while traffic estimates are almost always
+    # reported at the whole-domain level.
+    website_domain = Column(String, nullable=True)
+
     updated_at = Column(
         DateTime,
         default=datetime.utcnow,

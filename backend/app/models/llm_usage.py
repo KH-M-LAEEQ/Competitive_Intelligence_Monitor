@@ -10,6 +10,8 @@ class LLMUsagePurpose(str, enum.Enum):
     classification = "classification"
     briefing = "briefing"
     embedding = "embedding"
+    site_summary = "site_summary"
+    category_price = "category_price"
 
 
 class TokenUsageLog(Base):
