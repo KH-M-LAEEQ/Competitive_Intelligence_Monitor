@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import { useWorkspaceContext } from "@/lib/workspace-context";
 import { ChangeLog, Competitor, Surface } from "@/lib/types";
@@ -35,6 +36,9 @@ function diffLines(diff: string | null) {
 
 export default function ChangeFeedPage() {
   const { workspaceId, ready: contextReady } = useWorkspaceContext();
+  const searchParams = useSearchParams();
+  const highlightId = Number(searchParams.get("highlight")) || null;
+  const logRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [surfacesById, setSurfacesById] = useState<Record<number, Surface>>({});
@@ -107,6 +111,12 @@ export default function ChangeFeedPage() {
     })();
   }, [workspaceId, load]);
 
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    const el = logRefs.current[highlightId];
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightId, loading, changeLogs]);
+
   function competitorName(id: number) {
     return competitors.find((c) => c.id === id)?.name ?? `#${id}`;
   }
@@ -118,11 +128,12 @@ export default function ChangeFeedPage() {
 
   const visibleLogs = useMemo(() => {
     return changeLogs.filter((l) => {
+      if (l.id === highlightId) return true;
       if (!showFiltered && noiseIds.has(l.id)) return false;
       if (materialOnly && !(l.materiality_score !== null && l.materiality_score >= 50)) return false;
       return true;
     });
-  }, [changeLogs, noiseIds, showFiltered, materialOnly]);
+  }, [changeLogs, noiseIds, showFiltered, materialOnly, highlightId]);
 
   function markAsNoise(id: number) {
     const next = new Set(noiseIds);
@@ -207,12 +218,20 @@ export default function ChangeFeedPage() {
             const isExpanded = expanded.has(log.id);
             const visibleDiffLines = isExpanded ? lines : lines.slice(0, DIFF_PREVIEW_LINES);
             const isNoise = noiseIds.has(log.id);
+            const isHighlighted = log.id === highlightId;
 
             return (
               <div
                 key={log.id}
-                className="flex gap-6 rounded-[14px] border border-[var(--border-default)] bg-[var(--bg-card)] px-[22px] py-5"
-                style={isNoise ? { opacity: 0.55 } : undefined}
+                ref={(el) => {
+                  logRefs.current[log.id] = el;
+                }}
+                className="flex gap-6 rounded-[14px] border px-[22px] py-5 transition-colors"
+                style={{
+                  borderColor: isHighlighted ? "var(--accent)" : "var(--border-default)",
+                  background: isHighlighted ? "var(--accent-wash)" : "var(--bg-card)",
+                  opacity: isNoise ? 0.55 : 1,
+                }}
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-3">
                   <div className="flex flex-wrap items-center gap-2.5">

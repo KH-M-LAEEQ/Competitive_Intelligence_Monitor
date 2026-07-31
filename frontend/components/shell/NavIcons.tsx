@@ -68,3 +68,32 @@ export function GearIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function PanelCollapseIcon({ className }: IconProps) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className={className}>
+      <rect x="1.8" y="2.4" width="12.4" height="11.2" rx="1.8" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6.2 2.4v11.2" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4.2 6.4l-1.4 1.6 1.4 1.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function PanelExpandIcon({ className }: IconProps) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className={className}>
+      <rect x="1.8" y="2.4" width="12.4" height="11.2" rx="1.8" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6.2 2.4v11.2" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M3 6.4l1.4 1.6-1.4 1.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function LogoutIcon({ className }: IconProps) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className={className}>
+      <path d="M6.4 2H3.4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10.2 11.2 13.4 8l-3.2-3.2M13.4 8H6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
