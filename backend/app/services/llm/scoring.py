@@ -20,6 +20,7 @@ class MaterialityResult(BaseModel):
         "hiring_signal", "promotion", "other",
     ]
     rationale: str
+    highlights: list[str] = []
 
 
 def score_and_classify(

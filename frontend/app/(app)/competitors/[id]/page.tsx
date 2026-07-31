@@ -513,14 +513,26 @@ export default function CompetitorDetailPage() {
                   </span>
                 </div>
                 {log.rationale && (
-                  <p className="m-0 mb-2 text-[13px] leading-[1.55] text-[var(--text-secondary)]">
+                  <p className="m-0 text-[13px] leading-[1.55] text-[var(--text-secondary)]">
                     {log.rationale}
                   </p>
                 )}
+                {log.highlights && log.highlights.length > 0 && (
+                  <ul className="m-0 mt-1.5 list-disc pl-4 text-[12.5px] leading-[1.6] text-[var(--text-muted)]">
+                    {log.highlights.map((item, i) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                )}
                 {log.diff && (
-                  <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-[var(--border-subtler)] bg-[var(--bg-page)] p-3 font-mono text-[11.5px] text-[var(--text-dim)]">
-                    {log.diff}
-                  </pre>
+                  <details className="mt-2 group">
+                    <summary className="cursor-pointer select-none text-[11.5px] font-medium text-[var(--text-faint)] hover:text-[var(--text-muted)]">
+                      Show raw diff
+                    </summary>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded-md border border-[var(--border-subtler)] bg-[var(--bg-page)] p-3 font-mono text-[11.5px] text-[var(--text-dim)]">
+                      {log.diff}
+                    </pre>
+                  </details>
                 )}
               </div>
             ))}

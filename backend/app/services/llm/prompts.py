@@ -19,12 +19,20 @@ MATERIALITY_SYSTEM_PROMPT = (
     f"{UNTRUSTED_CONTENT_PREAMBLE}\n\n"
     "Classify the change into exactly one of: pricing_move, new_feature, "
     "positioning_shift, hiring_signal, promotion, other.\n\n"
+    "Also pull out up to 5 concrete highlights — specific items, prices, or "
+    "facts that changed (e.g. \"Added: 3 Piece Embroidered Raw Silk Suit — "
+    "Rs.42,990\"), each a single short line. If there are more than 5 "
+    "distinct changes, pick the 5 most notable rather than listing all of "
+    "them. If the diff has no distinct enumerable items (e.g. it's a single "
+    "prose change), return an empty list rather than restating the "
+    "rationale.\n\n"
     "Respond with ONLY a single JSON object, no other text, matching this "
     "shape:\n"
     '{"score": <integer 0-100, materiality>, '
     '"classification": <one of the categories above>, '
     '"rationale": <one or two plain-language sentences: what changed and '
-    "why it matters>}"
+    'why it matters>, '
+    '"highlights": [<up to 5 short strings, or empty list>]}'
 )
 
 

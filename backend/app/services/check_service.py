@@ -225,6 +225,7 @@ def _apply_materiality_scoring(
     change_log.materiality_score = result.score
     change_log.classification = result.classification
     change_log.rationale = result.rationale
+    change_log.highlights = result.highlights or None
 
 
 def _apply_embedding(db: Session, surface: Surface, change_log: ChangeLog) -> None:

@@ -48,6 +48,7 @@ export interface ChangeLog {
   materiality_score: number | null;
   classification: string | null;
   rationale: string | null;
+  highlights: string[] | null;
   created_at: string;
 }
 

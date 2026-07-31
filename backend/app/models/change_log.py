@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, JSON, ForeignKey
 from datetime import datetime
 from app.base import Base
 
@@ -39,6 +39,8 @@ class ChangeLog(Base):
     classification = Column(String)
 
     rationale = Column(Text)
+
+    highlights = Column(JSON, nullable=True)
 
     visual_diff_score = Column(Float, nullable=True)
 

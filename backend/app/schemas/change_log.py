@@ -10,6 +10,7 @@ class ChangeLogResponse(BaseModel):
     materiality_score: int | None = None
     classification: str | None = None
     rationale: str | None = None
+    highlights: list[str] | None = None
     visual_diff_score: float | None = None
     created_at: datetime
 
